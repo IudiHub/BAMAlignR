@@ -1,0 +1,343 @@
+---
+title: "BAMAlignR"
+author: "Cristina Iudica"
+date: "`r Sys.Date()`"
+output: BiocStyle::html_document
+vignette: >
+  %\VignetteIndexEntry{BAMAlignR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(BAMAlignR)
+library(stringr)
+library(Rsamtools)
+library(GenomicRanges)
+library(BSgenome.Hsapiens.NCBI.GRCh38)
+library(IRanges)
+```
+
+# Introduction
+
+
+As biological data accumulates in BAM/SAM files, understanding how specific DNA sequences align to reference genomes becomes crucial for deciphering genetic insights. The `BAMAlignR` package simplifies this by providing a user-friendly interface to explore these alignments. It's a specialized R package focused on enabling users to select DNA read entries from BAM/SAM files and **visualize their alignment** to reference genomes, powered by the **CIGAR string**. BAMAlignR is essential for genomics researchers, bioinformaticians, and anyone working with DNA sequencing data, expediting insights into genetics across domains like disease research and evolutionary biology.
+
+# Package Overview
+
+Welcome to **BAMAlignR**! This package is designed to provide a comprehensive suite of tools for analyzing read alignments and displaying alignment information. The core functionality of this package is encapsulated in the `ShowAlignment` function.
+
+# Getting Started
+
+To quickly and effectively utilize the features of **BAMAlignR**, you only need to run the `ShowAlignment` function. This function streamlines the process of extracting, analyzing, and displaying alignment information for a specific read, making it the centerpiece of this package.
+
+# How to Use 
+
+Using the `ShowAlignment` function is straightforward:
+
+1. Load the package using `library(BAMAlignR)`
+2. Provide the path to the BAM file containing read alignments and the read ID you want to analyze
+3. Run the `ShowAlignment` function with the specified BAM file path and read ID.
+
+The function will automatically perform the necessary steps to extract alignment details, analyze the CIGAR string, and present you with a concise summary of the alignment, i.e., the CIGAR string, the aligned reference sequence, and the aligned read sequence.
+
+# Example
+
+Here's a simple example to demonstrate how to use the `ShowAlignment` function:
+
+```{r}
+# Specify the BAM file path and read ID
+library(BAMAlignR)
+bamPath <- system.file("extdata", "HG00096.chrom11.ILLUMINA.bwa.bam", package = "BAMAlignR")
+readID <- "SRR062635.8528185"
+
+# Display alignment information using the core function
+ShowAlignment(bamPath, readID)
+```
+
+By following these steps, you'll efficiently utilize the power of the `ShowAlignment` function to accomplish your alignment analysis goals.
+
+# Functions
+
+Now each single function is explained and shown.
+
+## Extracting read information and perform some checks
+
+The `ExtractReadInfoAndCheck` function simplifies the extraction of key details about specific DNA reads from BAM files. It verifies read alignment, retrieves alignment-related attributes like reference sequence name, position, CIGAR string, sequence, and flag value, ensuring accurate genomic analysis.
+
+```{r}
+ExtractReadInfoAndCheck <- function(bamPath, readID) {
+
+  if (!file.exists(bamPath)) stop("The BAM file is not present in the extdata folder")
+
+  # scan the BAM file to retrieve all the reads and their information
+  reads <- scanBam(bamPath)[[1]]
+
+  # get the index of a specific read in 'reads' list
+  read_index <- which(reads$qname == readID)
+
+  if (!is.character(readID)) stop("ReadID must be a character!")
+
+  if (!(readID %in% reads$qname)) stop("That read ID is not present in the QNAME field of the BAM file. Try with another read ID.")
+
+  if (readID == "*") stop("The information about the read ID is unavailable")
+
+  # extract a specific read in the list based on its index
+  read_of_interest <- lapply(reads, function(xx) xx[read_index])
+
+  # if read ID of interest is associated with more than one value in the different fields of the list, take just the first one for simplicity
+  if (length(read_of_interest[[1]]) > 1) {
+    read_of_interest <- lapply(read_of_interest, function(x) x[1])
+  }
+
+  # extract the reference sequence name to which the read is aligned
+  read_rname <- read_of_interest$rname # read_rname is a factor
+  #read_rname_char <- as.character(read_rname)
+
+  if (read_rname == "*") stop("The read is unmapped or not aligned to any specific sequence in the reference genome")
+
+  # extract the leftmost mapping position of the first matching base within the read
+  read_pos <- read_of_interest$pos
+
+  if (read_pos == 0) stop("The read is unmapped without coordinate")
+
+  # extract the CIGAR string for the read
+  read_CIGAR <- read_of_interest$cigar
+
+  if (read_CIGAR == "*") stop("The CIGAR string is unavailable")
+
+  # extract the sequence of the read
+  read_seq_width <- read_of_interest$seq  #read_seq_width is a DNAStringSet object of length 1 containing the width of the sequence and the sequence itself
+  # convert the sequence into a character
+  read_seq_char <- toString(read_seq_width[[1]]) #or as.character(read_seq_width[[1]])
+
+  if (read_seq_char == "*") stop("The sequence of the read is not stored")
+
+  # extract the flag value of the read
+  read_flag <- read_of_interest$flag
+
+  read_info <- list(read_rname = read_rname, read_pos = read_pos, read_CIGAR = read_CIGAR , read_seq_char = read_seq_char, read_flag = read_flag)
+  return(read_info)
+}
+
+bamPath <- system.file("extdata", "HG00096.chrom11.ILLUMINA.bwa.bam", package = "BAMAlignR")
+readID <- "SRR062635.8528185"
+print(ExtractReadInfoAndCheck(bamPath, readID))
+```
+
+## Check the Mapping Strand of a Read
+
+The `CheckStrand` function checks the mapping strand of a read based on its read flag value. It determines whether the read is mapped to the forward or reverse strand.
+
+**NOTE:** when a read is mapped to the reverse strand of the reference genome, it is already stored in its reverse complemented form. This means that the read sequence in the BAM file is already aligned correctly to the reference genome.
+
+```{r}
+CheckStrand <- function(read_flag) {
+  # check if the 5th value is set
+  is_reverse_strand <- (bitwAnd(read_flag, 16) != 0)
+  if (is_reverse_strand) {
+    print("The read is mapping to the reverse strand")
+  } else {
+    print("The read is mapping to the forward strand")
+  }
+}
+
+CheckStrand(16)
+CheckStrand(0)
+```
+
+## Analyze Read Alignment with CIGAR string
+
+The `CigarAnalyzerRead` function processes the CIGAR string and read sequence to generate an aligned sequence that accurately reflects the read's alignment to a reference genome. The function iterates through the CIGAR string,interpreting the alignment operations (M, I, D, =, S, X, N) to construct the aligned sequence. The aligned sequence
+is built by combining the matching bases from the read with insertions, deletions and skipped regions.
+The function also uses the **CheckStrand** function to determine whether the read is mapped to the forward or reverse strand.
+The resulting aligned sequence and its length are returned as part of a list.
+The following table shows the main CIGAR operations:
+
+| Operation |                    Description                        | Consumes query | Consumes reference|
+|:---------:|:-----------------------------------------------------:|:--------------:|:-----------------:|
+|     M     | alignment match (can be a sequence match or mismatch) |      yes       |        yes        |
+|     I     | insertion to the reference                            |      yes       |        no         |
+|     D     | deletion from the reference                           |      no        |        yes        |
+|     =     | sequence match                                        |      yes       |        yes        |
+|     S     | soft clipping (clipped sequences present in SEQ)      |      yes       |        no         |
+|     X     | sequence mismatch                                     |      yes       |        yes        |
+|     N     | skipped region from the reference                     |      no        |        yes        |
+
+
+NOTE: “Consumes query” and “consumes reference” indicate whether the CIGAR operation causes the alignment to step along the query sequence and the reference sequence respectively.
+
+```{r}
+CigarAnalyzerRead <- function(read_CIGAR, read_seq_char, read_flag) {
+
+  # Extract the integers from the CIGAR string
+  integers <- as.numeric(str_extract_all(read_CIGAR, "\\d+")[[1]])
+
+  # Extract the characters from the CIGAR string
+  characters <- str_replace_all(read_CIGAR, "\\d+", "")
+  cigar_operations <- strsplit(characters, "")[[1]]
+
+  # Initialize the aligned sequence of the read
+  aligned_sequence <- ""
+
+  # Iterate over the integers and the cigar operations (i.e., the characters of the CIGAR string) simultaneously
+  for (i in seq_along(integers)) {
+    op_type <- cigar_operations[i]
+
+    # if the CIGAR operations are M, I, =, S, X, rewrite the read sequence as it is
+    if (op_type %in% c("M", "I", "=", "S", "X")) {
+      aligned_sequence <- paste0(aligned_sequence, substring(read_seq_char, 1, integers[i]))
+      read_seq_char <- substring(read_seq_char, integers[i] + 1, nchar(read_seq_char))
+      # else if the CIGAR operations are D, N, add a "-"
+    } else if (op_type %in% c("D", "N")) {
+      aligned_sequence <- paste0(aligned_sequence, strrep("-", integers[i]))
+    }
+  }
+  CheckStrand(read_flag)
+  # length of the aligned sequence
+  length_aligned_seq <- nchar(aligned_sequence)
+  aligned_seq_info <- list(aligned_sequence = aligned_sequence, length_aligned_seq = length_aligned_seq)
+  return(aligned_seq_info)
+}
+
+read_CIGAR <- "2S5M10D2M"
+read_seq_char <- "ACGACTGCA"
+read_flag <- 0
+aligned_seq_info <- CigarAnalyzerRead(read_CIGAR, read_seq_char, read_flag)
+cat("Aligned Sequence:", aligned_seq_info$aligned_sequence, "\n")
+cat("Length of Aligned Sequence:", aligned_seq_info$length_aligned_seq, "\n")
+```
+
+## Adjust the Starting Position of the read based on CIGAR String
+
+The `AdjustStartingPosition` function processes the CIGAR string and read startingposition to account for potential soft-clipped (S) or inserted (I) bases at the beginning of the read alignment. It iterates through the CIGAR operations and modifies the starting position based on the associated integers. If the first operation of the CIGAR string is a match (M),deletion (D), skipped region (N), equal match (=), or sequence mismatch (X), the function breaks and returns the original read position. If the first operation is soft-clipping (S) or insertion (I), the starting position is updated by subtracting the associated integer value.
+
+```{r}
+AdjustStartingPosition <- function(read_pos, read_CIGAR) {
+
+  # Extract the integers from the CIGAR string
+  integers <- as.numeric(str_extract_all(read_CIGAR, "\\d+")[[1]])
+
+  # Extract the characters from the CIGAR string
+  characters <- str_replace_all(read_CIGAR, "\\d+", "")
+  cigar_operations <- strsplit(characters, "")[[1]]
+
+  for (i in seq_along(integers)) {
+    op_type <- cigar_operations[i]
+    integers_0 <- integers[1]
+
+    if (op_type %in% c("M", "D", "N", "=", "X")) {
+      break
+    } else {
+      # if the first operation of the CIGAR string is S (or I), update the starting position
+      # by subtracting from the original position the associated number of operations
+      read_pos <- read_pos - integers[i]
+    }
+  }
+  return(read_pos)
+}
+
+read_pos <- 100
+read_CIGAR <- "3S2M"
+adjusted_pos <- AdjustStartingPosition(read_pos, read_CIGAR)
+cat("Adjusted Starting Position:", adjusted_pos, "\n")
+```
+
+## Extract the reference sequence
+
+The `ExtractReferenceSequence` function calculates the starting position of the read's alignment by adjusting it based on the CIGAR string using the `AdjustStartingPosition` function. It then defines a genomic range using the adjusted starting position and the length of the aligned sequence. The function retrieves the reference sequence from the Hsapiens reference genome using the `getSeq` function, and converts it to a character string.
+The resulting reference sequence is returned.
+
+**NOTE:** different BAM/SAM files can be aligned to various versions of the human genome or different genome assemblies, such as hg19, hg38, and GRCh38. It's essential to ensure you're using the appropriate reference genome package that corresponds to the version to which the data was originally aligned.
+
+```{r}
+ExtractReferenceSequence <- function(read_rname, length_aligned_seq, read_pos, read_CIGAR) {
+  read_pos <- AdjustStartingPosition(read_pos, read_CIGAR)
+  read_rname <- as.character(read_rname)
+  # define the genomic range of the reference sequence of interest
+  gr <- GRanges(read_rname, IRanges(read_pos, width=length_aligned_seq))
+  ref_seq <- getSeq(Hsapiens, gr)          # DNAStringSet object of length 1 containing the sequence and its width
+  ref_string <- toString(ref_seq[[1]])
+  return(ref_string)
+}
+
+read_rname <- 11
+length_aligned_seq <- 100
+read_pos <- 100
+read_CIGAR <- "100M"
+ref_sequence <- ExtractReferenceSequence(read_rname, length_aligned_seq, read_pos, read_CIGAR)
+```
+
+## Analyze the CIGAR string and print the aligned reference sequence
+
+The `CigarAnalyzerReference` function processes the CIGAR string, starting position, and reference name to generate an aligned reference sequence that accurately reflects the alignment of the reference genome. The function iterates through the CIGAR string, considering various alignment operations (M, =, S, X, D, N, I) and constructs the aligned reference sequence. The resulting aligned reference sequence is returned.
+
+```{r}
+CigarAnalyzerReference <- function(read_CIGAR, read_rname, length_aligned_seq, read_pos) {
+  ref_string <- ExtractReferenceSequence(read_rname, length_aligned_seq, read_pos, read_CIGAR)
+  # Extract integers from the CIGAR string
+  integers <- as.numeric(str_extract_all(read_CIGAR, "\\d+")[[1]])
+
+  # Extract characters from the CIGAR string
+  characters <- str_replace_all(read_CIGAR, "\\d+", "")
+  cigar_operations <- strsplit(characters, "")[[1]]
+
+  # Initialize aligned_sequence
+  aligned_ref_seq <- ""
+
+  # Iterate over the integers and cigar_operations simultaneously
+  for (i in seq_along(integers)) {
+    op_type <- cigar_operations[i]
+
+    # if the CIGAR operations are M, =, S, X, D, N, rewrite the reference sequence as it is
+    if (op_type %in% c("M", "=", "S", "X", "D", "N")) {
+      aligned_ref_seq <- paste0(aligned_ref_seq, substring(ref_string, 1, integers[i]))
+      ref_string <- substring(ref_string, integers[i] + 1, nchar(ref_string))
+      # else if the CIGAR operations is I add a "-"
+    } else if (op_type %in% c("I")) {
+      aligned_ref_seq <- paste0(aligned_ref_seq, strrep("-", integers[i]))
+    }
+  }
+  return(aligned_ref_seq)
+}
+
+read_CIGAR <- "6M3I2M"
+read_seq_char <- "TCTAACGC"
+read_rname <- 11
+length_aligned_seq <- 100
+read_pos <- 100
+aligned_ref_seq <- CigarAnalyzerReference(read_CIGAR, read_rname, length_aligned_seq, read_pos)
+cat("Aligned Reference Sequence:", aligned_ref_seq, "\n")
+```
+
+## Show the read alignment and the CIGAR string
+
+
+The `ShowAlignment` function is the core function of the package that displays the alignment of the mapped read to the reference genome and the corresponding CIGAR string.
+It uses all the function previously defined. 
+
+```{r}
+ShowAlignment <- function(bamPath, readID) {
+  read_info <- ExtractReadInfoAndCheck(bamPath, readID)
+  read_flag <- read_info$read_flag
+  read_seq_char <- read_info$read_seq_char
+  read_CIGAR <- read_info$read_CIGAR
+  read_pos <- read_info$read_pos
+  read_rname <- read_info$read_rname
+  aligned_seq_info <- CigarAnalyzerRead(read_CIGAR, read_seq_char, read_flag)
+  aligned_sequence <- aligned_seq_info$aligned_sequence
+  length_aligned_seq <- aligned_seq_info$length_aligned_seq
+  aligned_ref_seq <- CigarAnalyzerReference(read_CIGAR, read_rname, length_aligned_seq, read_pos)
+  cat("CIGAR:", read_CIGAR, "\n", "Ref.:", aligned_ref_seq, "\n", "Read:", aligned_sequence, "\n")
+}
+```
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,22 @@
+Package: BAMAlignR
+Type: Package
+Title: Show the alignment of a mapped read
+Version: 0.1.0
+Authors@R: person(given = "Cristina",
+        family = "Iudica",
+        role = c("aut", "cre"),
+        email = "cristina.iudica@mail.polimi.it")
+Description: BAMAlignR is a comprehensive R package designed to empower users with an interactive experience in exploring and visualizing read alignments from BAM/SAM files to a reference genome. Through a user-friendly interface, the package enables individuals to pinpoint and focus on specific read entries, unlocking a deep understanding of the alignment process. By visually unraveling how a read's sequence aligns to the reference genome using its corresponding CIGAR string, users can extract crucial insights and make informed decisions regarding their genomic data.
+Depends: R(>= 4.3.0)
+Imports: Rsamtools, GenomicRanges, stringr, IRanges,
+        BSgenome.Hsapiens.NCBI.GRCh38
+License: GPL-2
+Encoding: UTF-8
+biocViews: Software, Alignment, Sequencing, SequenceMatching, Genetics
+Suggests: BiocStyle, knitr, rmarkdown, testthat (>= 3.0.0)
+VignetteBuilder: knitr
+RoxygenNote: 7.2.3
+NeedsCompilation: no
+Packaged: 2023-08-27 18:37:20 UTC; Cristina
+Author: Cristina Iudica [aut, cre]
+Maintainer: Cristina Iudica <cristina.iudica@mail.polimi.it>
